@@ -35,9 +35,10 @@ SINONIMOS = {
         "tuvo lugar un evento del tipo {tipo_inc}."
     ],
     'participantes': [
-        "En ella participaron {participantes_str} del grupo {GRADE} {GROUP}.",
-        "En el suceso estuvieron involucrados {participantes_str}, del grupo {GRADE} {GROUP}.",
-        "Los participantes fueron {participantes_str} del grupo {GRADE} {GROUP}."
+        # Se eliminó la palabra "grupo"; queda "del {GRADE}"{GROUP}"" tal como pediste.
+        'En ella participaron {participantes_str} del {GRADE}"{GROUP}".',
+        'En el suceso estuvieron involucrados {participantes_str} del {GRADE}"{GROUP}".',
+        'Los participantes fueron {participantes_str} del {GRADE}"{GROUP}".'
     ],
     'gravedad': [
         "La gravedad fue evaluada como {gravedad_lower}.",
@@ -67,7 +68,7 @@ def set_cell_borders(cell, **kwargs):
             for key, val in edge_data.items():
                 tag.set(qn(f'w:{key}'), str(val))
             tcBorders.append(tag)
-    
+
     tcPr.append(tcBorders)
 
 
@@ -84,7 +85,7 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     sec = doc.sections[0]
     sec.page_width = Inches(8.5)
     sec.page_height = Inches(11)
-    
+
     margin_size = Inches(0.5)
     sec.top_margin = margin_size
     sec.bottom_margin = margin_size
@@ -128,12 +129,18 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     r.bold = True
     r.font.size = Pt(14)
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    doc.add_paragraph(LOCATION, style='Subtitle').alignment = WD_ALIGN_PARAGRAPH.CENTER
+    try:
+        p_sub = doc.add_paragraph(LOCATION, style='Subtitle')
+        p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    except Exception:
+        # Si style 'Subtitle' no existe, añadimos sin estilo
+        p = doc.add_paragraph(LOCATION)
+        p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph()
 
     # ----- Narración Dinámica con formato -----
     participantes_str = ', '.join(participantes)
-    
+
     frase_apertura = random.choice(SINONIMOS['apertura']).format(hora=hora, fecha=fecha)
     frase_contexto = random.choice(SINONIMOS['contexto']).format(actividad=actividad, lugar=lugar)
     frase_suceso = random.choice(SINONIMOS['suceso']).format(tipo_inc=tipo_inc)
@@ -145,20 +152,20 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
         f"{frase_apertura} {frase_contexto} {frase_suceso} "
         f"{frase_participantes} {frase_gravedad} {frase_descripcion}"
     )
-    
+
     if medidas:
         narr += f" Las medidas tomadas fueron: {medidas}."
     if seguimiento:
         narr += f" Para su seguimiento se determinó: {seguimiento}."
-        
+
     p_narr = doc.add_paragraph()
     run_narr = p_narr.add_run(narr)
     run_narr.font.size = Pt(12)
     p_narr.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    
+
     doc.add_paragraph()
 
-    # ----- Tabla de Firmas Estilizada (CÓDIGO COMPLETO RESTAURADO) -----
+    # ----- Tabla de Firmas Estilizada -----
     firmas_data = []
     if gravedad in ["Moderada", "Grave"]:
         firmas_data.append(("Director", DIRECTOR_NAME))
@@ -173,18 +180,18 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
 
     signatures_table = doc.add_table(rows=1, cols=3)
     signatures_table.alignment = WD_TABLE_ALIGNMENT.CENTER
-    
+
     col_widths = (Inches(2.0), Inches(3.0), Inches(2.5))
-    
+
     border_normal = {"sz": 6, "val": "single", "color": "000000"}
     border_thick = {"sz": 12, "val": "single", "color": "000000"}
     border_none = {"val": "nil"}
-    
+
     hdr_cells = signatures_table.rows[0].cells
     hdr_cells[0].text = 'Cargo / Relación'
     hdr_cells[1].text = 'Nombre Completo'
     hdr_cells[2].text = 'Firma'
-    
+
     for i, cell in enumerate(hdr_cells):
         cell.paragraphs[0].runs[0].bold = True
         cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
@@ -195,8 +202,8 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
         row_cells = signatures_table.add_row().cells
         row_cells[0].text = cargo
         row_cells[1].text = nombre
-        row_cells[2].text = '' 
-        
+        row_cells[2].text = ''
+
         for i, cell in enumerate(row_cells):
             cell.width = col_widths[i]
             cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER

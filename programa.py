@@ -11,36 +11,30 @@ import os
 
 from wordgen import generar_word
 from excelgen import registrar_incidencia, actualizar_dashboard, inicializar_excel
-# Asumiendo que tienes estos archivos para cargar recursos
-# from resources import load_all_resources
-# from config import SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP, INCIDENCIAS_DIR
+from resources import load_all_resources
+from config import INCIDENCIAS_DIR, SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP
 
-# ===================== CONFIGURACIÓN (Ejemplo si no tienes los archivos) =====================
-# Si no tienes los archivos config.py y resources.py, puedes descomentar y usar esto como ejemplo.
-# SCHOOL_NAME = "Mi Escuela"
-# LOCATION = "Ciudad, Estado"
-# DIRECTOR_NAME = "Nombre del Director"
-# TEACHER_NAME = "Nombre del Maestro"
-# GRADE = "2°"
-# GROUP = "A"
-# INCIDENCIAS_DIR = "documentos"
-alumnos = ["Rigo", "Diego", "Juan", "Pedro"]
-padres = {"Rigo": "Papá de Rigo", "Diego": "Mamá de Diego"}
-locations = ["El patio", "El salón", "Los baños", "La biblioteca"]
-tipos = ["Indisciplina", "Agresión física", "Agresión verbal"]
-# =========================================================================================
+# ===================== CARGA DE RECURSOS =====================
+alumnos, padres, locations, tipos = load_all_resources()
+
+# Valores por defecto si no se cargó nada desde recursos/
+if not alumnos:
+    alumnos = ["Rigo", "Diego", "Juan", "Pedro"]
+if not locations:
+    locations = ["El patio", "El salón", "Los baños"]
+if not tipos:
+    tipos = ["Indisciplina", "Agresión física", "Agresión verbal"]
 
 # ===================== INICIALIZACIÓN =====================
+# Inicializar Excel (crea data/bitacoras.xlsx si no existe)
 inicializar_excel()
+
 # Crear el directorio para los documentos si no existe
-if not os.path.exists("documentos"):
-    os.makedirs("documentos")
-INCIDENCIAS_DIR = "documentos" # Definimos el directorio de salida
+_output_dir = INCIDENCIAS_DIR if INCIDENCIAS_DIR else "documentos"
+INCIDENCIAS_DIR = _output_dir
+os.makedirs(INCIDENCIAS_DIR, exist_ok=True)
 
-# Cargamos recursos (si usas el archivo resources.py)
-# alumnos, padres, locations, tipos = load_all_resources()
 gravedades = ["Leve", "Moderada", "Grave"]
-
 
 # ===================== FUNCIONES =====================
 def generar_doc():
@@ -63,10 +57,10 @@ def generar_doc():
 
     # 1. Preparamos el diccionario de datos para Excel
     datos_excel = {
-        "fecha": fecha, "hora": hora, "lugar": lugar, "gravedad": gravedad, 
-        "participantes": participantes, "link": "" # El link se añadirá después
+        "fecha": fecha, "hora": hora, "lugar": lugar, "gravedad": gravedad,
+        "participantes": participantes, "link": ""  # El link se añadirá después
     }
-    
+
     # 2. Definimos una ruta única para el documento de Word
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     nombres_alumnos = "_".join(participantes).replace(" ", "")
@@ -75,7 +69,6 @@ def generar_doc():
 
     try:
         # 3. Generamos el documento de Word
-        # La función generar_word devuelve la ruta del archivo si tiene éxito
         ruta_generada = generar_word(
             fecha=fecha,
             hora=hora,
@@ -91,8 +84,8 @@ def generar_doc():
             alumnos_seleccionados=participantes,
             output_path=output_path
         )
-        
-        # 4. AÑADIMOS EL LINK AL DICCIONARIO (LA CORRECCIÓN CLAVE) ✅
+
+        # 4. AÑADIMOS EL LINK AL DICCIONARIO
         datos_excel['link'] = ruta_generada
 
         # 5. Guardamos el registro en Excel ahora que el diccionario está completo
@@ -112,7 +105,7 @@ def actualizar_excel():
         messagebox.showerror("Error", f"No se pudo actualizar el dashboard: {e}")
 
 
-# ===================== INTERFAZ (Sin cambios) =====================
+# ===================== INTERFAZ =====================
 root = tk.Tk()
 root.title("Bitácora de Incidencias")
 root.geometry("900x650")
