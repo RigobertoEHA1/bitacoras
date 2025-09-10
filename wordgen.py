@@ -5,34 +5,39 @@ Descripción: Generación del documento Word para incidencias.
 """
 
 import os
-import datetime
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
 from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
-from docx.table import Table
 from docx.enum.table import WD_ALIGN_VERTICAL
 
 from config import SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP
 
-
 def set_cell_border(cell, **kwargs):
     """
     Establece los bordes de una celda de tabla.
-    Acepta top, bottom, left, right con diccionarios de {'sz': 12, 'val': 'single', 'color': '#000000'}
+    Cada borde debe ser un dict: {'sz': 12, 'val': 'single', 'color': '#000000'}.
     """
     tc = cell._tc
     tcPr = tc.get_or_add_tcPr()
 
-    # Definir bordes por defecto si no se especifican
     borders = {
-        'top': {'sz': 6, 'val': 'single', 'color': '#000000'},
-        'bottom': {'sz': 6, 'val': 'single', 'color': '#000000'},
-        'left': {'sz': 6, 'val': 'single', 'color': '#000000'},
-        'right': {'sz': 6, 'val': 'single', 'color': '#000000'},
+        'top': {'sz': 6, 'val': 'single', 'color': '000000'},
+        'bottom': {'sz': 6, 'val': 'single', 'color': '000000'},
+        'left': {'sz': 6, 'val': 'single', 'color': '000000'},
+        'right': {'sz': 6, 'val': 'single', 'color': '000000'},
     }
-    borders.update(kwargs) # Sobrescribir con los kwargs proporcionados
+
+    # Sobrescribimos solo si kwargs tiene dicts válidos
+    for key, val in kwargs.items():
+        if val is None:
+            borders[key] = None
+        elif isinstance(val, dict):
+            borders[key] = val
+        else:
+            # Ignorar valores inválidos
+            continue
 
     for border_name, border_props in borders.items():
         if border_props is not None:
@@ -42,12 +47,17 @@ def set_cell_border(cell, **kwargs):
             tcPr.append(border_elm)
 
 
+
 def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
                  gravedad, narracion, medidas, seguimiento, padres_dict,
                  alumnos_seleccionados, output_path):
     """
-    Genera el documento Word de la bitácora.
+    Genera el documento Word de la bitácora de manera segura.
     """
+
+    # 🔹 Aseguramos que padres_dict sea un diccionario
+    if not isinstance(padres_dict, dict):
+        padres_dict = {}
 
     doc = Document()
     sec = doc.sections[0]
@@ -58,17 +68,13 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     sec.left_margin = Inches(1)
     sec.right_margin = Inches(1)
 
-    # ----- Encabezado con logos y título (más estético) -----
+    # ----- Encabezado con logos -----
     try:
         header = sec.header
-        # --- 👇 THE FIX IS HERE ---
-        # 1. Crear la tabla sin el argumento 'width'
-        header_table = header.add_table(rows=1, cols=3)
-        # 2. Asignar el ancho en una línea separada
-        header_table.width = Inches(6.5)
+        header_table = header.add_table(rows=1, cols=3, width=Inches(6.5))
         header_table.autofit = False
 
-        # Columna 0: Logo 1 (izquierda, más pequeño)
+        # Logo izquierdo
         cell_logo1 = header_table.cell(0, 0)
         cell_logo1.width = Inches(1.2)
         cell_logo1.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
@@ -79,11 +85,11 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
         else:
             cell_logo1.paragraphs[0].add_run("Logo Izquierdo")
 
-        # Columna 1: Espacio central
+        # Columna central
         cell_center = header_table.cell(0, 1)
         cell_center.width = Inches(2.8)
 
-        # Columna 2: Logo 2 (derecha)
+        # Logo derecho
         cell_logo2 = header_table.cell(0, 2)
         cell_logo2.width = Inches(2.5)
         cell_logo2.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
@@ -97,7 +103,7 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     except Exception as e:
         print(f"Advertencia: No se pudieron agregar los logos al encabezado. Causa: {e}")
 
-    # Título principal en el cuerpo del documento
+    # ----- Título -----
     t = doc.add_paragraph()
     r = t.add_run(f"BITÁCORA DE INCIDENCIA - {SCHOOL_NAME}\n")
     r.bold = True
@@ -109,7 +115,7 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     sub.runs[0].italic = True
     doc.add_paragraph("")
 
-    # ----- Narración en prosa -----
+    # ----- Narración -----
     narr = (
         f"Siendo las {hora} horas del día {fecha}, durante {actividad} "
         f"en {lugar}, se presentó una incidencia del tipo {tipo_inc}. "
@@ -126,7 +132,7 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     doc.add_paragraph("")
     doc.add_paragraph("")
 
-    # ----- Firmas dinámicas en cuadros -----
+    # ----- Firmas -----
     firmas_data = []
     if gravedad in ["Moderada", "Grave"]:
         firmas_data.append(("Director", DIRECTOR_NAME))
@@ -135,7 +141,7 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
         firmas_data.append(("Alumno", alumno))
     if gravedad == "Grave":
         for alumno in alumnos_seleccionados:
-            padre = padres_dict.get(alumno, "Padre de familia")
+            padre = str(padres_dict.get(alumno, "Padre de familia"))
             firmas_data.append((f"Padre/Madre de familia ({alumno})", padre))
     firmas_data.append(("Testigo", "____________________"))
 
@@ -155,12 +161,10 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     firma_idx = 0
     for r_idx in range(num_rows):
         for c_idx in range(num_cols):
+            cell = signatures_table.cell(r_idx, c_idx)
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             if firma_idx < num_firmas:
                 title, name = firmas_data[firma_idx]
-                cell = signatures_table.cell(r_idx, c_idx)
-                cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-
-                # Limpiar párrafos existentes y quitar bordes por defecto
                 cell.text = ''
                 set_cell_border(cell, top=None, bottom=None, left=None, right=None)
                 set_cell_border(cell, sz=12, val='single', color='#000000')
@@ -181,13 +185,13 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
                 p_name.paragraph_format.space_before = Pt(0)
                 run_name = p_name.add_run(name)
                 run_name.font.size = Pt(9)
+
                 firma_idx += 1
             else:
-                cell = signatures_table.cell(r_idx, c_idx)
+                cell.text = ''
                 set_cell_border(cell, top=None, bottom=None, left=None, right=None)
-                cell.text = ""
 
-    # Guardar el documento
+    # Guardar documento
     output_dir = os.path.dirname(output_path)
     os.makedirs(output_dir, exist_ok=True)
     doc.save(output_path)
