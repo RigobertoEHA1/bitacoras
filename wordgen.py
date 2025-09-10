@@ -9,7 +9,37 @@ import datetime
 from docx import Document
 from docx.shared import Inches, Pt
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
+from docx.oxml import OxmlElement
+from docx.table import Table
+from docx.enum.table import WD_ALIGN_VERTICAL
+
 from config import SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP
+
+
+def set_cell_border(cell, **kwargs):
+    """
+    Establece los bordes de una celda de tabla.
+    Acepta top, bottom, left, right con diccionarios de {'sz': 12, 'val': 'single', 'color': '#000000'}
+    """
+    tc = cell._tc
+    tcPr = tc.get_or_add_tcPr()
+
+    # Definir bordes por defecto si no se especifican
+    borders = {
+        'top': {'sz': 6, 'val': 'single', 'color': '#000000'},
+        'bottom': {'sz': 6, 'val': 'single', 'color': '#000000'},
+        'left': {'sz': 6, 'val': 'single', 'color': '#000000'},
+        'right': {'sz': 6, 'val': 'single', 'color': '#000000'},
+    }
+    borders.update(kwargs) # Sobrescribir con los kwargs proporcionados
+
+    for border_name, border_props in borders.items():
+        if border_props is not None:
+            border_elm = OxmlElement(f'w:{border_name}')
+            for prop, val in border_props.items():
+                border_elm.set(qn(f'w:{prop}'), str(val))
+            tcPr.append(border_elm)
 
 
 def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
@@ -19,7 +49,6 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     Genera el documento Word de la bitácora.
     """
 
-    # Crear documento
     doc = Document()
     sec = doc.sections[0]
     sec.page_width = Inches(8.5)
@@ -29,24 +58,46 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     sec.left_margin = Inches(1)
     sec.right_margin = Inches(1)
 
-    # ----- Encabezado con logos -----
-    header = sec.header
-    table = header.add_table(rows=1, cols=2)
-    table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    # ----- Encabezado con logos y título (más estético) -----
+    try:
+        header = sec.header
+        # --- 👇 THE FIX IS HERE ---
+        # 1. Crear la tabla sin el argumento 'width'
+        header_table = header.add_table(rows=1, cols=3)
+        # 2. Asignar el ancho en una línea separada
+        header_table.width = Inches(6.5)
+        header_table.autofit = False
 
-    # Logo 1 (izquierda, cuadrado)
-    cell_left = table.cell(0, 0)
-    logo1 = os.path.join("recursos", "logo1.png")
-    if os.path.exists(logo1):
-        cell_left.paragraphs[0].add_run().add_picture(logo1, width=Inches(1))
+        # Columna 0: Logo 1 (izquierda, más pequeño)
+        cell_logo1 = header_table.cell(0, 0)
+        cell_logo1.width = Inches(1.2)
+        cell_logo1.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        logo1_path = os.path.join("recursos", "logo1.png")
+        if os.path.exists(logo1_path):
+            run = cell_logo1.paragraphs[0].add_run()
+            run.add_picture(logo1_path, width=Inches(0.8))
+        else:
+            cell_logo1.paragraphs[0].add_run("Logo Izquierdo")
 
-    # Logo 2 (derecha, rectangular más grande)
-    cell_right = table.cell(0, 1)
-    logo2 = os.path.join("recursos", "logo2.png")
-    if os.path.exists(logo2):
-        cell_right.paragraphs[0].add_run().add_picture(logo2, width=Inches(2.5))
+        # Columna 1: Espacio central
+        cell_center = header_table.cell(0, 1)
+        cell_center.width = Inches(2.8)
 
-    # ----- Título -----
+        # Columna 2: Logo 2 (derecha)
+        cell_logo2 = header_table.cell(0, 2)
+        cell_logo2.width = Inches(2.5)
+        cell_logo2.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.RIGHT
+        logo2_path = os.path.join("recursos", "logo2.png")
+        if os.path.exists(logo2_path):
+            run = cell_logo2.paragraphs[0].add_run()
+            run.add_picture(logo2_path, width=Inches(2.5))
+        else:
+            cell_logo2.paragraphs[0].add_run("Logo Derecho")
+
+    except Exception as e:
+        print(f"Advertencia: No se pudieron agregar los logos al encabezado. Causa: {e}")
+
+    # Título principal en el cuerpo del documento
     t = doc.add_paragraph()
     r = t.add_run(f"BITÁCORA DE INCIDENCIA - {SCHOOL_NAME}\n")
     r.bold = True
@@ -56,7 +107,6 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     sub = doc.add_paragraph(LOCATION)
     sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     sub.runs[0].italic = True
-
     doc.add_paragraph("")
 
     # ----- Narración en prosa -----
@@ -67,45 +117,78 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
         f"La gravedad fue evaluada como {gravedad.lower()}. "
         f"Los hechos se describen de la siguiente manera: {narracion}. "
     )
-
     if medidas:
         narr += f"Las medidas tomadas fueron: {medidas}. "
-
     if seguimiento:
         narr += f"Para su seguimiento se determinó: {seguimiento}. "
-
-    doc.add_paragraph(narr)
-
+    p_narr = doc.add_paragraph(narr)
+    p_narr.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+    doc.add_paragraph("")
     doc.add_paragraph("")
 
-    # ----- Firmas dinámicas -----
-    firmas = []
-
-    # Siempre Maestro y alumnos implicados + testigo
-    firmas.append(f"Maestro de grupo: {TEACHER_NAME}")
-    for alumno in alumnos_seleccionados:
-        firmas.append(f"Alumno: {alumno}")
-
-    firmas.append("Testigo: __________________________")
-
-    # Moderada y Grave → también Director
+    # ----- Firmas dinámicas en cuadros -----
+    firmas_data = []
     if gravedad in ["Moderada", "Grave"]:
-        firmas.insert(0, f"Director: {DIRECTOR_NAME}")
-
-    # Grave → también Padres de los alumnos
+        firmas_data.append(("Director", DIRECTOR_NAME))
+    firmas_data.append(("Maestro de Grupo", TEACHER_NAME))
+    for alumno in alumnos_seleccionados:
+        firmas_data.append(("Alumno", alumno))
     if gravedad == "Grave":
         for alumno in alumnos_seleccionados:
             padre = padres_dict.get(alumno, "Padre de familia")
-            firmas.append(f"Padre de familia ({alumno}): {padre}")
+            firmas_data.append((f"Padre/Madre de familia ({alumno})", padre))
+    firmas_data.append(("Testigo", "____________________"))
 
-    # Crear tabla de firmas
-    table = doc.add_table(rows=len(firmas), cols=1)
-    for i, text in enumerate(firmas):
-        cell = table.cell(i, 0)
-        p = cell.paragraphs[0]
-        run = p.add_run(text + "\n\nFirma: __________________________")
-        run.font.size = Pt(10)
+    num_firmas = len(firmas_data)
+    num_cols = 2
+    num_rows = (num_firmas + num_cols - 1) // num_cols
 
-    # Guardar documento
+    signatures_table = doc.add_table(rows=num_rows, cols=num_cols)
+    signatures_table.autofit = False
+    signatures_table.width = Inches(6.5)
+    signatures_table.alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+    col_width = Inches(signatures_table.width.emu / num_cols)
+    for col in signatures_table.columns:
+        col.width = col_width
+
+    firma_idx = 0
+    for r_idx in range(num_rows):
+        for c_idx in range(num_cols):
+            if firma_idx < num_firmas:
+                title, name = firmas_data[firma_idx]
+                cell = signatures_table.cell(r_idx, c_idx)
+                cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+
+                # Limpiar párrafos existentes y quitar bordes por defecto
+                cell.text = ''
+                set_cell_border(cell, top=None, bottom=None, left=None, right=None)
+                set_cell_border(cell, sz=12, val='single', color='#000000')
+
+                p_title = cell.add_paragraph()
+                p_title.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                run_title = p_title.add_run(title)
+                run_title.bold = True
+                run_title.font.size = Pt(10)
+
+                p_line = cell.add_paragraph()
+                p_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_line.paragraph_format.space_after = Pt(0)
+                p_line.add_run("\n\n____________________")
+
+                p_name = cell.add_paragraph()
+                p_name.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p_name.paragraph_format.space_before = Pt(0)
+                run_name = p_name.add_run(name)
+                run_name.font.size = Pt(9)
+                firma_idx += 1
+            else:
+                cell = signatures_table.cell(r_idx, c_idx)
+                set_cell_border(cell, top=None, bottom=None, left=None, right=None)
+                cell.text = ""
+
+    # Guardar el documento
+    output_dir = os.path.dirname(output_path)
+    os.makedirs(output_dir, exist_ok=True)
     doc.save(output_path)
     return output_path

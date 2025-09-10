@@ -7,11 +7,13 @@ Interfaz principal para registrar incidencias escolares.
 import tkinter as tk
 from tkinter import ttk, messagebox
 from datetime import datetime
+import os  # 👈 Added os import for file path handling
 
 from resources import load_all_resources
 from wordgen import generar_word
 from excelgen import registrar_incidencia, actualizar_dashboard, inicializar_excel
-from config import ESCUELA, UBICACION, DIRECTOR, MAESTRO, GRADO, GRUPO
+# 👇 CORRECTED: Using the correct variable names from config.py
+from config import SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP, INCIDENCIAS_DIR
 
 
 # ===================== INICIALIZACIÓN =====================
@@ -45,31 +47,54 @@ def generar_doc():
         messagebox.showwarning("Falta información", "Complete todos los menús desplegables.")
         return
 
-    datos = {
-        "fecha": fecha,
-        "hora": hora,
-        "lugar": lugar,
-        "actividad": actividad,
-        "tipo": tipo,
-        "gravedad": gravedad,
-        "participantes": participantes,
-        "narracion": narracion,
-        "medidas": medidas,
-        "seguimiento": seguimiento
+    # --- 👇 CORRECTED: Function call logic ---
+
+    # 1. Prepare data dictionary for Excel
+    datos_excel = {
+        "fecha": fecha, "hora": hora, "lugar": lugar, "actividad": actividad,
+        "tipo": tipo, "gravedad": gravedad, "participantes": participantes,
+        "narracion": narracion, "medidas": medidas, "seguimiento": seguimiento
     }
+    
+    # 2. Define a unique filename for the Word document
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    nombres_alumnos = "_".join(participantes).replace(" ", "")
+    output_filename = f"Incidencia_{nombres_alumnos}_{timestamp}.docx"
+    output_path = os.path.join(INCIDENCIAS_DIR, output_filename)
 
-    # Guardar en Word
-    generar_word(datos)
+    # 3. Call generar_word with all required arguments, not just one dictionary
+    try:
+        generar_word(
+            fecha=fecha,
+            hora=hora,
+            lugar=lugar,
+            actividad=actividad,
+            participantes=participantes,
+            tipo_inc=tipo,
+            gravedad=gravedad,
+            narracion=narracion,
+            medidas=medidas,
+            seguimiento=seguimiento,
+            padres_dict=padres,  # Pass the loaded parents dictionary
+            alumnos_seleccionados=participantes, # Pass the list of selected students
+            output_path=output_path # Pass the full path for the output file
+        )
+        
+        # 4. Guardar en Excel only after Word generation is successful
+        registrar_incidencia(datos_excel)
 
-    # Guardar en Excel
-    registrar_incidencia(datos)
+        messagebox.showinfo("Éxito", f"Incidencia registrada correctamente.\nWord guardado en: {output_path}")
 
-    messagebox.showinfo("Éxito", "Incidencia registrada correctamente.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo generar el documento: {e}")
 
 
 def actualizar_excel():
-    actualizar_dashboard()
-    messagebox.showinfo("Excel", "Dashboard actualizado correctamente.")
+    try:
+        actualizar_dashboard()
+        messagebox.showinfo("Excel", "Dashboard actualizado correctamente.")
+    except Exception as e:
+        messagebox.showerror("Error", f"No se pudo actualizar el dashboard: {e}")
 
 
 # ===================== INTERFAZ =====================
