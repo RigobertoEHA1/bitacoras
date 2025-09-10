@@ -1,6 +1,6 @@
-Jardineras
-Cancha
-Galera
-Baños
-Salon de clases
-Biblioteca
+Las jardineras
+La cancha
+La galera
+Los baños
+El salon de clases
+La biblioteca

@@ -1,21 +1,20 @@
 # -*- coding: utf-8 -*-
 """
 Archivo: excelgen.py
-Descripción: Generación y actualización del Excel con dashboard y registro de incidencias.
+Descripción: Generación y actualización del Excel con dashboard, registro de incidencias y contador de faltas.
 """
 
 import os
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Font, Alignment
-from openpyxl.chart import BarChart, PieChart, Reference
-
+from openpyxl.chart import PieChart, Reference
 
 EXCEL_PATH = os.path.join("data", "bitacoras.xlsx")
 
 
 def inicializar_excel():
     """
-    Crea el archivo Excel con las hojas necesarias si no existe.
+    Crea el archivo Excel con las hojas necesarias y los encabezados correctos si no existe.
     """
     if not os.path.exists("data"):
         os.makedirs("data")
@@ -29,29 +28,17 @@ def inicializar_excel():
         ws_dash["A1"] = "Dashboard de Incidencias"
         ws_dash["A1"].font = Font(size=14, bold=True)
         ws_dash["A1"].alignment = Alignment(horizontal="center")
-        ws_dash.merge_cells("A1:E1")
+        ws_dash.merge_cells("A1:D1")
 
-        # Hoja incidencias
-        ws = wb.create_sheet("Incidencias")
-        ws.append([
-            "Fecha", "Hora", "Lugar", "Actividad", "Tipo",
-            "Gravedad", "Participantes", "Narración", "Medidas", "Seguimiento"
+        # Hoja de Incidencias (simplificada)
+        ws_inc = wb.create_sheet("Incidencias")
+        ws_inc.append([
+            "Fecha", "Hora", "Lugar", "Gravedad", "Participantes", "Link al Documento"
         ])
-
-        # Hoja recursos
-        ws_rec = wb.create_sheet("Recursos")
-        ws_rec["A1"] = "Lugares"
-        ws_rec["B1"] = "Tipos de Incidencia"
-        ws_rec["C1"] = "Gravedad"
-        ws_rec["A2"] = "Aula"
-        ws_rec["A3"] = "Patio"
-        ws_rec["A4"] = "Dirección"
-        ws_rec["B2"] = "Agresión verbal"
-        ws_rec["B3"] = "Agresión física"
-        ws_rec["B4"] = "Falta de respeto"
-        ws_rec["C2"] = "Leve"
-        ws_rec["C3"] = "Moderada"
-        ws_rec["C4"] = "Grave"
+        
+        # Hoja para el Registro de Faltas
+        ws_faltas = wb.create_sheet("Registro de Faltas")
+        ws_faltas.append(["Alumno", "Total de Faltas"])
 
         wb.save(EXCEL_PATH)
 
@@ -59,96 +46,104 @@ def inicializar_excel():
 def registrar_incidencia(datos):
     """
     Registra una nueva incidencia en la hoja 'Incidencias'.
-    datos = dict con claves:
-    [fecha, hora, lugar, actividad, tipo, gravedad, participantes, narracion, medidas, seguimiento]
+    'datos' es un dict con claves:
+    [fecha, hora, lugar, gravedad, participantes, link]
     """
     wb = load_workbook(EXCEL_PATH)
     ws = wb["Incidencias"]
 
     ws.append([
-        datos["fecha"], datos["hora"], datos["lugar"], datos["actividad"],
-        datos["tipo"], datos["gravedad"], ", ".join(datos["participantes"]),
-        datos["narracion"], datos["medidas"], datos["seguimiento"]
+        datos["fecha"], datos["hora"], datos["lugar"], datos["gravedad"],
+        ", ".join(datos["participantes"]), datos["link"]
     ])
 
     wb.save(EXCEL_PATH)
 
 
-def actualizar_dashboard():
+def registrar_falta(alumnos_con_falta):
     """
-    Actualiza la hoja Dashboard con resumen y gráficos.
+    Registra una o varias faltas en la hoja 'Registro de Faltas'.
+    'alumnos_con_falta' es una lista de nombres de alumnos.
     """
     wb = load_workbook(EXCEL_PATH)
+    ws = wb["Registro de Faltas"]
 
-    if "Dashboard" not in wb.sheetnames:
-        wb.create_sheet("Dashboard")
+    # Crear un diccionario para buscar filas existentes rápidamente
+    alumnos_existentes = {}
+    for row_idx, row in enumerate(ws.iter_rows(min_row=2, max_col=2), start=2):
+        alumno_cell = row[0]
+        conteo_cell = row[1]
+        alumnos_existentes[alumno_cell.value] = conteo_cell
+
+    for alumno in alumnos_con_falta:
+        if alumno in alumnos_existentes:
+            # Si el alumno existe, se incrementa su contador
+            alumnos_existentes[alumno].value += 1
+        else:
+            # Si no existe, se añade una nueva fila
+            ws.append([alumno, 1])
+    
+    wb.save(EXCEL_PATH)
+
+
+def actualizar_dashboard():
+    """
+    Actualiza la hoja Dashboard con el resumen de gravedad (sin duplicados).
+    """
+    wb = load_workbook(EXCEL_PATH)
     ws_dash = wb["Dashboard"]
-
-    # Limpiar contenido excepto título
-    for row in ws_dash["A3:Z100"]:
-        for cell in row:
-            cell.value = None
-
     ws_inc = wb["Incidencias"]
 
-    # Construir tabla resumen
-    conteo = {}
-    for row in ws_inc.iter_rows(min_row=2, values_only=True):
-        if not row[0]:
+    # Limpiar contenido anterior del dashboard
+    for row in ws_dash.iter_rows(min_row=3):
+        for cell in row:
+            cell.value = None
+    # Eliminar gráficos antiguos para no sobreponerlos
+    ws_dash._charts = []
+
+    # --- Lógica para contar incidencias por gravedad SIN duplicados ---
+    incidencias_unicas = set()
+    # Se considera duplicado si coincide: Fecha, Gravedad y Participantes
+    for row in ws_inc.iter_rows(min_row=2, max_col=5, values_only=True):
+        if not row[0]: # Ignorar filas vacías
             continue
-        alumnos = row[6].split(", ")
-        gravedad = row[5]
-        for alumno in alumnos:
-            if alumno not in conteo:
-                conteo[alumno] = {"Leve": 0, "Moderada": 0, "Grave": 0}
-            conteo[alumno][gravedad] += 1
+        
+        fecha = row[0]
+        gravedad = row[3]
+        # Ordenar participantes para que "A, B" sea igual que "B, A"
+        participantes = tuple(sorted(p.strip() for p in row[4].split(',')))
+        
+        incidencia_unica = (fecha, gravedad, participantes)
+        incidencias_unicas.add(incidencia_unica)
 
-    # Escribir tabla
-    ws_dash["A3"] = "Alumno"
-    ws_dash["B3"] = "Leves"
-    ws_dash["C3"] = "Moderadas"
-    ws_dash["D3"] = "Graves"
-    ws_dash["E3"] = "Total"
-    fila = 4
-    for alumno, datos in conteo.items():
-        ws_dash[f"A{fila}"] = alumno
-        ws_dash[f"B{fila}"] = datos["Leve"]
-        ws_dash[f"C{fila}"] = datos["Moderada"]
-        ws_dash[f"D{fila}"] = datos["Grave"]
-        ws_dash[f"E{fila}"] = sum(datos.values())
-        fila += 1
-
-    # Gráfico de barras por alumno
-    chart = BarChart()
-    chart.title = "Incidencias por Alumno"
-    data = Reference(ws_dash, min_col=2, max_col=4, min_row=3, max_row=fila - 1)
-    cats = Reference(ws_dash, min_col=1, min_row=4, max_row=fila - 1)
-    chart.add_data(data, titles_from_data=True)
-    chart.set_categories(cats)
-    chart.y_axis.title = "Número de incidencias"
-    chart.x_axis.title = "Alumno"
-    ws_dash.add_chart(chart, "G3")
-
-    # Gráfico de pastel por gravedad total
+    # Contar totales desde el conjunto de incidencias únicas
     total_gravedad = {"Leve": 0, "Moderada": 0, "Grave": 0}
-    for d in conteo.values():
-        for k in total_gravedad.keys():
-            total_gravedad[k] += d[k]
-
-    ws_dash["A20"] = "Gravedad"
-    ws_dash["B20"] = "Cantidad"
-    fila = 21
+    for incidencia in incidencias_unicas:
+        gravedad = incidencia[1] # La gravedad es el segundo elemento de la tupla
+        if gravedad in total_gravedad:
+            total_gravedad[gravedad] += 1
+    
+    # Escribir la tabla de resumen de gravedad
+    ws_dash["A3"] = "Gravedad"
+    ws_dash["B3"] = "Cantidad"
+    ws_dash["A3"].font = Font(bold=True)
+    ws_dash["B3"].font = Font(bold=True)
+    
+    fila = 4
     for g, val in total_gravedad.items():
         ws_dash[f"A{fila}"] = g
         ws_dash[f"B{fila}"] = val
         fila += 1
 
+    # Crear el gráfico de pastel
     pie = PieChart()
-    pie.title = "Distribución por Gravedad"
-    data = Reference(ws_dash, min_col=2, min_row=20, max_row=fila - 1)
-    labels = Reference(ws_dash, min_col=1, min_row=21, max_row=fila - 1)
+    pie.title = "Distribución de Incidencias por Gravedad"
+    
+    data = Reference(ws_dash, min_col=2, min_row=3, max_row=fila - 1)
+    labels = Reference(ws_dash, min_col=1, min_row=4, max_row=fila - 1)
+    
     pie.add_data(data, titles_from_data=True)
     pie.set_categories(labels)
-    ws_dash.add_chart(pie, "G20")
+    ws_dash.add_chart(pie, "D3") # Posicionar el gráfico
 
     wb.save(EXCEL_PATH)
