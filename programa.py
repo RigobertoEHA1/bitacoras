@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Archivo: programa.py
-Interfaz principal para registrar incidencias escolares.
+Interfaz principal para registrar, eliminar y gestionar incidencias escolares.
 """
 
 import tkinter as tk
@@ -10,7 +10,7 @@ from datetime import datetime
 import os
 
 from wordgen import generar_word
-from excelgen import registrar_incidencia, actualizar_dashboard, inicializar_excel
+from excelgen import registrar_incidencia, actualizar_dashboard, inicializar_excel, eliminar_incidencia
 from resources import load_all_resources
 from config import INCIDENCIAS_DIR, SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP
 
@@ -91,18 +91,55 @@ def generar_doc():
         # 5. Guardamos el registro en Excel ahora que el diccionario está completo
         registrar_incidencia(datos_excel)
 
+        # 6. Actualizamos el dashboard automáticamente
+        actualizar_dashboard()
+
         messagebox.showinfo("Éxito", f"Incidencia registrada.\nWord guardado en: {ruta_generada}")
 
     except Exception as e:
         messagebox.showerror("Error", f"No se pudo generar el documento o registrar en Excel:\n{e}")
 
 
-def actualizar_excel():
-    try:
-        actualizar_dashboard()
-        messagebox.showinfo("Excel", "Dashboard actualizado correctamente.")
-    except Exception as e:
-        messagebox.showerror("Error", f"No se pudo actualizar el dashboard: {e}")
+def abrir_submenu_eliminar():
+    """
+    Abre un submenú para eliminar incidencias.
+    """
+    def eliminar():
+        seleccion = listbox_incidencias.curselection()
+        if not seleccion:
+            messagebox.showwarning("Seleccione una incidencia", "Debe seleccionar una incidencia para eliminarla.")
+            return
+
+        # Obtener el índice
+        indice = seleccion[0]
+        incidencia = incidencias[indice]
+
+        # Confirmar eliminación
+        confirm = messagebox.askyesno("Confirmar eliminación", f"¿Está seguro de que desea eliminar la incidencia?\n\n{incidencia}")
+        if confirm:
+            try:
+                eliminar_incidencia(indice)
+                actualizar_dashboard()
+                messagebox.showinfo("Éxito", "Incidencia eliminada correctamente.")
+                submenu.destroy()
+            except Exception as e:
+                messagebox.showerror("Error", f"Ocurrió un error al eliminar la incidencia:\n{e}")
+
+    incidencias = obtener_incidencias()  # Obtener lista de incidencias desde Excel
+
+    submenu = tk.Toplevel(root)
+    submenu.title("Eliminar Incidencias")
+    submenu.geometry("600x400")
+
+    ttk.Label(submenu, text="Seleccione una incidencia para eliminar:").pack(pady=10)
+
+    listbox_incidencias = tk.Listbox(submenu, height=15, width=80)
+    for inc in incidencias:
+        listbox_incidencias.insert(tk.END, inc)
+    listbox_incidencias.pack(pady=10)
+
+    btn_eliminar = ttk.Button(submenu, text="Eliminar", command=eliminar)
+    btn_eliminar.pack(pady=10)
 
 
 # ===================== INTERFAZ =====================
@@ -168,8 +205,8 @@ text_seguimiento.grid(row=6, column=1, columnspan=5, sticky="ew", pady=5)
 btn_word = ttk.Button(frm, text="Generar Word + Guardar", command=generar_doc)
 btn_word.grid(row=7, column=1, pady=15, sticky="ew")
 
-btn_excel = ttk.Button(frm, text="Actualizar Dashboard Excel", command=actualizar_excel)
-btn_excel.grid(row=7, column=3, pady=15, sticky="ew")
+btn_eliminar = ttk.Button(frm, text="Eliminar Incidencia", command=abrir_submenu_eliminar)
+btn_eliminar.grid(row=7, column=3, pady=15, sticky="ew")
 
 # Ajuste de columnas
 for i in range(6):
