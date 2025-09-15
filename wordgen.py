@@ -14,7 +14,7 @@ from docx.oxml.ns import qn
 from docx.oxml import OxmlElement
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 
-from config import SCHOOL_NAME, LOCATION, DIRECTOR_NAME, TEACHER_NAME, GRADE, GROUP
+# No longer importing from config, these will be passed as arguments
 
 # El diccionario vuelve a usar la variable {lugar} directamente.
 SINONIMOS = {
@@ -35,10 +35,9 @@ SINONIMOS = {
         "tuvo lugar un evento del tipo {tipo_inc}."
     ],
     'participantes': [
-        # Se eliminó la palabra "grupo"; queda "del {GRADE}"{GROUP}"" tal como pediste.
-        'En ella participaron {participantes_str} del {GRADE}"{GROUP}".',
-        'En el suceso estuvieron involucrados {participantes_str} del {GRADE}"{GROUP}".',
-        'Los participantes fueron {participantes_str} del {GRADE}"{GROUP}".'
+        'En ella participaron {participantes_str}.',
+        'En el suceso estuvieron involucrados {participantes_str}.',
+        'Los participantes fueron {participantes_str}.'
     ],
     'gravedad': [
         "La gravedad fue evaluada como {gravedad_lower}.",
@@ -74,12 +73,15 @@ def set_cell_borders(cell, **kwargs):
 
 def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
                  gravedad, narracion, medidas, seguimiento, padres_dict,
-                 alumnos_seleccionados, output_path):
+                 output_path, maestros_externos=None, school_name=None,
+                 director_name=None, teacher_name=None, grade=None, group=None):
     """
     Genera el documento Word de la bitácora de manera segura.
     """
     if not isinstance(padres_dict, dict):
         padres_dict = {}
+    if maestros_externos is None:
+        maestros_externos = []
 
     doc = Document()
     sec = doc.sections[0]
@@ -125,26 +127,27 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
 
     # ----- Título -----
     t = doc.add_paragraph()
-    r = t.add_run(f"BITÁCORA DE INCIDENCIA - {SCHOOL_NAME}\n")
+    r = t.add_run(f"BITÁCORA DE INCIDENCIA - {school_name}\n")
     r.bold = True
     r.font.size = Pt(14)
     t.alignment = WD_ALIGN_PARAGRAPH.CENTER
     try:
-        p_sub = doc.add_paragraph(LOCATION, style='Subtitle')
+        p_sub = doc.add_paragraph(location, style='Subtitle')
         p_sub.alignment = WD_ALIGN_PARAGRAPH.CENTER
     except Exception:
         # Si style 'Subtitle' no existe, añadimos sin estilo
-        p = doc.add_paragraph(LOCATION)
+        p = doc.add_paragraph(location)
         p.alignment = WD_ALIGN_PARAGRAPH.CENTER
     doc.add_paragraph()
 
     # ----- Narración Dinámica con formato -----
-    participantes_str = ', '.join(participantes)
+    participantes_str_list = [f"{p['nombre']} ({p['grado']}° '{p['grupo']}')" for p in participantes]
+    participantes_str = ', '.join(participantes_str_list)
 
     frase_apertura = random.choice(SINONIMOS['apertura']).format(hora=hora, fecha=fecha)
     frase_contexto = random.choice(SINONIMOS['contexto']).format(actividad=actividad, lugar=lugar)
     frase_suceso = random.choice(SINONIMOS['suceso']).format(tipo_inc=tipo_inc)
-    frase_participantes = random.choice(SINONIMOS['participantes']).format(participantes_str=participantes_str, GRADE=GRADE, GROUP=GROUP)
+    frase_participantes = random.choice(SINONIMOS['participantes']).format(participantes_str=participantes_str)
     frase_gravedad = random.choice(SINONIMOS['gravedad']).format(gravedad_lower=gravedad.lower())
     frase_descripcion = random.choice(SINONIMOS['descripcion_hechos']).format(narracion=narracion)
 
@@ -168,14 +171,17 @@ def generar_word(fecha, hora, lugar, actividad, participantes, tipo_inc,
     # ----- Tabla de Firmas Estilizada -----
     firmas_data = []
     if gravedad in ["Moderada", "Grave"]:
-        firmas_data.append(("Director", DIRECTOR_NAME))
-    firmas_data.append(("Maestro de Grupo", TEACHER_NAME))
-    for alumno in alumnos_seleccionados:
-        firmas_data.append(("Alumno", alumno))
+        firmas_data.append(("Director", director_name))
+    firmas_data.append(("Maestro de Grupo", teacher_name))
+    if maestros_externos:
+        for maestro in maestros_externos:
+            firmas_data.append(("Maestro Externo", f"{maestro['nombre']} ({maestro['grupo']})"))
+    for alumno in participantes:
+        firmas_data.append(("Alumno", f"{alumno['nombre']} ({alumno['grado']}° '{alumno['grupo']}')"))
     if gravedad == "Grave":
-        for alumno in alumnos_seleccionados:
-            padre = str(padres_dict.get(alumno, "Padre/Madre de familia"))
-            firmas_data.append((f"Padre/Madre de familia ({alumno})", padre))
+        for alumno in participantes:
+            padre = str(padres_dict.get(alumno['nombre'], "Padre/Madre de familia"))
+            firmas_data.append((f"Padre/Madre de familia ({alumno['nombre']})", padre))
     firmas_data.append(("Testigo", ""))
 
     signatures_table = doc.add_table(rows=1, cols=3)

@@ -1,0 +1,26 @@
+[
+    {
+        "nombre": "Rigo",
+        "padre": "Juan Perez",
+        "grado": "6",
+        "grupo": "A"
+    },
+    {
+        "nombre": "Diego",
+        "padre": "Maria Rodriguez",
+        "grado": "6",
+        "grupo": "A"
+    },
+    {
+        "nombre": "Juan",
+        "padre": "Pedro Gomez",
+        "grado": "5",
+        "grupo": "B"
+    },
+    {
+        "nombre": "Pedro",
+        "padre": "Ana Lopez",
+        "grado": "5",
+        "grupo": "B"
+    }
+]

@@ -64,13 +64,21 @@ def inicializar_excel():
 def registrar_incidencia(datos):
     """
     Registra una nueva incidencia en la hoja 'Incidencias'.
+    Maneja una lista de diccionarios para los participantes.
     """
     wb = load_workbook(EXCEL_PATH)
     ws = wb["Incidencias"]
 
+    # Formatear la lista de participantes
+    participantes_str_list = []
+    for p in datos["participantes"]:
+        # Asumimos que p es un diccionario con 'nombre', 'grado', 'grupo'
+        participantes_str_list.append(f"{p['nombre']} ({p['grado']}° '{p['grupo']}')")
+    participantes_str = ", ".join(participantes_str_list)
+
     ws.append([
         datos["fecha"], datos["hora"], datos["lugar"], datos["gravedad"],
-        ", ".join(datos["participantes"]), datos.get("link", "")
+        participantes_str, datos.get("link", "")
     ])
 
     autosize_sheet(ws)
@@ -122,31 +130,4 @@ def actualizar_dashboard():
     ws_dash.add_chart(pie, "D3")
 
     autosize_sheet(ws_dash)
-    wb.save(EXCEL_PATH)
-
-
-def obtener_incidencias():
-    """
-    Devuelve una lista de incidencias registradas en la hoja 'Incidencias'.
-    """
-    wb = load_workbook(EXCEL_PATH)
-    ws = wb["Incidencias"]
-    incidencias = []
-
-    for row in ws.iter_rows(min_row=2, values_only=True):
-        if row[0]:  # Si hay fecha, consideramos que es una incidencia válida
-            incidencias.append(f"Fecha: {row[0]}, Lugar: {row[2]}, Gravedad: {row[3]}, Participantes: {row[4]}")
-    return incidencias
-
-
-def eliminar_incidencia(indice):
-    """
-    Elimina una incidencia de la hoja 'Incidencias' dado su índice.
-    """
-    wb = load_workbook(EXCEL_PATH)
-    ws = wb["Incidencias"]
-
-    row_to_delete = indice + 2  # Ajustar índice porque la fila 1 es el encabezado
-    ws.delete_rows(row_to_delete)
-
     wb.save(EXCEL_PATH)
